@@ -1,0 +1,5 @@
+3rdpart/
+.vscode/
+.idea/
+*.swp
+checkpoints/
