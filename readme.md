@@ -22,7 +22,7 @@
 1. TensorRT引擎封装（`TRTEngine`类）
 2. 图像预处理（`ImageProcessor`类）
 3. 编码器和解码器的推理实现（`Encoder`和`Decoder`类）
-4. 编码器-解码器流水线（`EncoderDecoderPipeline`类）
+4. 编码器-解码器pipeline（`EncoderDecoderPipeline`类）
 
 ## 依赖项
 
