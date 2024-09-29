@@ -93,7 +93,6 @@ void mixMemory::release_cpu() {
 }
 
 void* mixMemory::get_gpu(size_t size) {
-    std::cout << " gpu _size_" <<gpu_size_ <<endl;
     if (gpu_size_ < size) {
         release_gpu();
         gpu_size_ = size;
@@ -175,7 +174,7 @@ void Decoder::preare_ponits(int ori_height, int ori_width, float* points) {
     points[1] = points[1] / ori_height * 1024;
 }
 
-void Decoder::prepare_inputs(std::vector<float*>& input_data_device, float* points, size_t* image_size, float& labels, cudaStream_t stream) {
+void Decoder:: prepare_inputs(std::vector<float*>& input_data_device, float* points, size_t* image_size, float labels, cudaStream_t stream) {
     std::vector<float> mask_input(1 * 1024 / scale_factor * 1024 / scale_factor, 0);
     size_t has_mask_input = 0;
     preare_ponits(image_size[0], image_size[1], points);

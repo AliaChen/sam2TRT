@@ -182,7 +182,7 @@ namespace TRT {
 		void initialize(nvinfer1::ICudaEngine* engine);
 		bool runDecoderInfer(float* bindings[], cudaStream_t stream, nvinfer1::IExecutionContext* context);
 		void preare_ponits(int ori_height, int ori_width, float* points);
-		void prepare_inputs(std::vector<float*>&input_data_device, float* points, size_t* image_size, float &labels, cudaStream_t stream);
+		void prepare_inputs(std::vector<float*>&input_data_device, float* points, size_t* image_size, float labels, cudaStream_t stream);
 
 	public:
 		std::vector<std::unique_ptr<mixMemory>>inputDataList;

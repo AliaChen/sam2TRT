@@ -45,9 +45,9 @@ void EncoderDecoderPipeline::runEncoderTask(const cv::Mat& image) {
     bool status = encoder->runEncoderInfer(bindings, encoderEngine->getStream(), encoderEngine->getContext());
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - st_time);
-    std::cout << "Encoder consume time: " << duration.count() << " ms" << std::endl;
+    //std::cout << "Encoder consume time: " << duration.count() << " ms" << std::endl;
     if (status) {
-        std::cout << " encoder infer done." <<endl;
+        //std::cout << " encoder infer done." <<endl;
         EncoderOutput output;
         output.data = {encoder->output_data_device[0], 
                        encoder->output_data_device[1], 
@@ -73,56 +73,98 @@ void EncoderDecoderPipeline::runDecoderTask() {
 
         auto encoderOutput = std::move(encoderOutputQueue.front());
         encoderOutputQueue.pop();
+        std::cout << "encoderOutputQueue size: " << encoderOutputQueue.size() << std::endl;
+        //float point_coords[2] = {800, 440}; // 示例坐标
+        //float labels = 1.0f;
+        size_t image_size[2] = {encoderOutput.ori_height, encoderOutput.ori_width};
+        //decoder->prepare_inputs(decoder->input_data_device, point_coords, image_size, labels, decoderEngine->getStream());
+        std::vector<std::array<float,2>> point_coords_list = { {800, 440}, {200,50}};
+        std::vector<float> labels = { 1.0f, 1.0f};
+
+        for (int p = 0; p < point_coords_list.size(); ++p){
+            decoder->prepare_inputs(decoder->input_data_device, point_coords_list[p].data(), image_size, labels[p], decoderEngine->getStream());
+              
+            // 更新绑定数组以包含所有7个输入和2个输出
+            float* bindings[] = {
+                encoderOutput.data[0], encoderOutput.data[2], encoderOutput.data[1],
+                decoder->input_data_device[0], decoder->input_data_device[1],
+                decoder->input_data_device[2], decoder->input_data_device[3],
+                decoder->output_data_device[0], decoder->output_data_device[1]
+
+                
+            };
+
+            bool status = decoder->runDecoderInfer(bindings, decoderEngine->getStream(), decoderEngine->getContext());
+
+        
+
+            if (!status) {
+                std::cerr << "Decoder inference failed" << std::endl;
+            } else {
+                // 将输出从设备内存复制到主机内存
+                for (int i = 0; i < decoder->outputDataList.size(); ++i) {
+                    checkRuntime(cudaMemcpyAsync(decoder->output_data_host[i], 
+                                                decoder->output_data_device[i],
+                                                decoder->output_size_list[i] * sizeof(float),
+                                                cudaMemcpyDeviceToHost,
+                                                decoderEngine->getStream()));
+                }
+                checkRuntime(cudaStreamSynchronize(decoderEngine->getStream()));
+
+            }
+
+            for (int n = 0; n < 3; ++n) {
+                std::cout << p  <<"   Score: " << decoder->output_data_host[0][n] << std::endl;
+            }
+
+        
+        }
         lock.unlock();
 
-        float point_coords[2] = {800, 440}; // 示例坐标
-        float labels = 1.0f;
-        size_t image_size[2] = {encoderOutput.ori_height, encoderOutput.ori_width};
+        // // 更新绑定数组以包含所有7个输入和2个输出
+        // float* bindings[] = {
+        //     encoderOutput.data[0], encoderOutput.data[2], encoderOutput.data[1],
+        //     decoder->input_data_device[0], decoder->input_data_device[1],
+        //     decoder->input_data_device[2], decoder->input_data_device[3],
+        //     decoder->output_data_device[0], decoder->output_data_device[1]
 
-     
-        decoder->prepare_inputs(decoder->input_data_device, point_coords, image_size, labels, decoderEngine->getStream());
-        // 更新绑定数组以包含所有7个输入和2个输出
-        float* bindings[] = {
-            encoderOutput.data[0], encoderOutput.data[2], encoderOutput.data[1],
-            decoder->input_data_device[0], decoder->input_data_device[1],
-            decoder->input_data_device[2], decoder->input_data_device[3],
-            decoder->output_data_device[0], decoder->output_data_device[1]
-        };
+            
+        // };
 
         
    
         // 处理输出...
   
-        cudaError_t error = cudaGetLastError();
-        if (error != cudaSuccess) {
-            std::cerr << "CUDA error before inference: " << cudaGetErrorString(error) << std::endl;
-        }
+        // cudaError_t error = cudaGetLastError();
+        // if (error != cudaSuccess) {
+        //     std::cerr << "CUDA error before inference: " << cudaGetErrorString(error) << std::endl;
+        // }
 
-        bool status = decoder->runDecoderInfer(bindings, decoderEngine->getStream(), decoderEngine->getContext());
+        // bool status = decoder->runDecoderInfer(bindings, decoderEngine->getStream(), decoderEngine->getContext());
 
-        error = cudaGetLastError();
-        if (error != cudaSuccess) {
-            std::cerr << "CUDA error after inference: " << cudaGetErrorString(error) << std::endl;
-        }
+        // error = cudaGetLastError();
+        // if (error != cudaSuccess) {
+        //     std::cerr << "CUDA error after inference: " << cudaGetErrorString(error) << std::endl;
+        // }
 
-        if (!status) {
-            std::cerr << "Decoder inference failed" << std::endl;
-        } else {
-            // 将输出从设备内存复制到主机内存
-            for (int i = 0; i < decoder->outputDataList.size(); ++i) {
-                checkRuntime(cudaMemcpyAsync(decoder->output_data_host[i], 
-                                             decoder->output_data_device[i],
-                                             decoder->output_size_list[i] * sizeof(float),
-                                             cudaMemcpyDeviceToHost,
-                                             decoderEngine->getStream()));
-            }
-            checkRuntime(cudaStreamSynchronize(decoderEngine->getStream()));
+        // if (!status) {
+        //     std::cerr << "Decoder inference failed" << std::endl;
+        // } else {
+        //     // 将输出从设备内存复制到主机内存
+        //     for (int i = 0; i < decoder->outputDataList.size(); ++i) {
+        //         checkRuntime(cudaMemcpyAsync(decoder->output_data_host[i], 
+        //                                      decoder->output_data_device[i],
+        //                                      decoder->output_size_list[i] * sizeof(float),
+        //                                      cudaMemcpyDeviceToHost,
+        //                                      decoderEngine->getStream()));
+        //     }
+        //     checkRuntime(cudaStreamSynchronize(decoderEngine->getStream()));
 
-        }
+        // }
 
-        for (int n = 0; n < 3; ++n) {
-            std::cout << "Score: " << decoder->output_data_host[0][n] << std::endl;
-        }
+        // for (int n = 0; n < 3; ++n) {
+        //     std::cout << "Score: " << decoder->output_data_host[0][n] << std::endl;
+        // }
 
 
 
