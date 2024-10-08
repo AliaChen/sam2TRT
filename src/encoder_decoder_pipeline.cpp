@@ -4,7 +4,6 @@
 #include <chrono>
 
 namespace TRT {
-
 EncoderDecoderPipeline::EncoderDecoderPipeline(const std::string& encoderPath, const std::string& decoderPath)
     : logger(),  // 初始化 logger
       encoderEngine(std::make_unique<TRTEngine>(encoderPath, logger)),
@@ -38,11 +37,17 @@ void EncoderDecoderPipeline::runEncoderTask(const cv::Mat& image) {
 
     float* input_data_device = imageProcessor->preprocess_ima(const_cast<cv::Mat&>(image));
     
-    float* bindings[] = {input_data_device, encoder->output_data_device[0], 
-                         encoder->output_data_device[1], encoder->output_data_device[2]};
+    // 确保 encoder->output_data_device 数组的大小和访问是正确的
+    if (encoder->output_data_device.size() < 3) {
+        std::cerr << "Encoder output data device size is less than expected" << std::endl;
+        return;
+    }
+
+    std::vector<float*> bindings = {input_data_device, encoder->output_data_device[0], 
+                                    encoder->output_data_device[1], encoder->output_data_device[2]};
     
     auto st_time = std::chrono::high_resolution_clock::now();
-    bool status = encoder->runEncoderInfer(bindings, encoderEngine->getStream(), encoderEngine->getContext());
+    bool status = encoder->runEncoderInfer(bindings.data(), encoderEngine->getStream(), encoderEngine->getContext());
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - st_time);
     //std::cout << "Encoder consume time: " << duration.count() << " ms" << std::endl;
@@ -54,6 +59,7 @@ void EncoderDecoderPipeline::runEncoderTask(const cv::Mat& image) {
                        encoder->output_data_device[2]};
         output.ori_height = ori_height;
         output.ori_width = ori_width;
+        output.ori_mat = image;
         {
             std::lock_guard<std::mutex> lock(mtx);
             encoderOutputQueue.push(std::move(output));
@@ -66,7 +72,6 @@ void EncoderDecoderPipeline::runDecoderTask() {
     while (true) {
         std::unique_lock<std::mutex> lock(mtx);
         cv.wait(lock, [this]{ return !encoderOutputQueue.empty() || done; });
-        
         if (done && encoderOutputQueue.empty()) {
             break;
         }
@@ -78,9 +83,10 @@ void EncoderDecoderPipeline::runDecoderTask() {
         //float labels = 1.0f;
         size_t image_size[2] = {encoderOutput.ori_height, encoderOutput.ori_width};
         //decoder->prepare_inputs(decoder->input_data_device, point_coords, image_size, labels, decoderEngine->getStream());
-        std::vector<std::array<float,2>> point_coords_list = { {800, 440}, {200,50}};
+        std::vector<std::array<float,2>> point_coords_list = { {800, 440}, {800,300}};
         std::vector<float> labels = { 1.0f, 1.0f};
 
+        std::vector<cv::Mat> output_masks;
         for (int p = 0; p < point_coords_list.size(); ++p){
             decoder->prepare_inputs(decoder->input_data_device, point_coords_list[p].data(), image_size, labels[p], decoderEngine->getStream());
               
@@ -90,13 +96,9 @@ void EncoderDecoderPipeline::runDecoderTask() {
                 decoder->input_data_device[0], decoder->input_data_device[1],
                 decoder->input_data_device[2], decoder->input_data_device[3],
                 decoder->output_data_device[0], decoder->output_data_device[1]
-
-                
             };
 
             bool status = decoder->runDecoderInfer(bindings, decoderEngine->getStream(), decoderEngine->getContext());
-
-        
 
             if (!status) {
                 std::cerr << "Decoder inference failed" << std::endl;
@@ -110,64 +112,23 @@ void EncoderDecoderPipeline::runDecoderTask() {
                                                 decoderEngine->getStream()));
                 }
                 checkRuntime(cudaStreamSynchronize(decoderEngine->getStream()));
-
             }
+
+            bool select_best = true;
+            cv::Mat mask = imageProcessor->process_output(decoder->output_data_host[0], decoder->output_size_list[0], 
+                    decoder->output_data_host[1], decoder->output_size_list[1], 
+                    select_best, encoderOutput.ori_width, encoderOutput.ori_height);
+            
+            output_masks.push_back(mask);
 
             for (int n = 0; n < 3; ++n) {
                 std::cout << p  <<"   Score: " << decoder->output_data_host[0][n] << std::endl;
             }
-
-        
         }
-        lock.unlock();
-
-        // // 更新绑定数组以包含所有7个输入和2个输出
-        // float* bindings[] = {
-        //     encoderOutput.data[0], encoderOutput.data[2], encoderOutput.data[1],
-        //     decoder->input_data_device[0], decoder->input_data_device[1],
-        //     decoder->input_data_device[2], decoder->input_data_device[3],
-        //     decoder->output_data_device[0], decoder->output_data_device[1]
-
-            
-        // };
-
         
-   
-        // 处理输出...
-  
-        // cudaError_t error = cudaGetLastError();
-        // if (error != cudaSuccess) {
-        //     std::cerr << "CUDA error before inference: " << cudaGetErrorString(error) << std::endl;
-        // }
-
-        // bool status = decoder->runDecoderInfer(bindings, decoderEngine->getStream(), decoderEngine->getContext());
-
-        // error = cudaGetLastError();
-        // if (error != cudaSuccess) {
-        //     std::cerr << "CUDA error after inference: " << cudaGetErrorString(error) << std::endl;
-        // }
-
-        // if (!status) {
-        //     std::cerr << "Decoder inference failed" << std::endl;
-        // } else {
-        //     // 将输出从设备内存复制到主机内存
-        //     for (int i = 0; i < decoder->outputDataList.size(); ++i) {
-        //         checkRuntime(cudaMemcpyAsync(decoder->output_data_host[i], 
-        //                                      decoder->output_data_device[i],
-        //                                      decoder->output_size_list[i] * sizeof(float),
-        //                                      cudaMemcpyDeviceToHost,
-        //                                      decoderEngine->getStream()));
-        //     }
-        //     checkRuntime(cudaStreamSynchronize(decoderEngine->getStream()));
-
-        // }
-
-        // for (int n = 0; n < 3; ++n) {
-        //     std::cout << "Score: " << decoder->output_data_host[0][n] << std::endl;
-        // }
-
-
-
+        bool draw_border = true;
+        imageProcessor->draw_masks(encoderOutput.ori_mat, output_masks, draw_border);
+        lock.unlock();
     }
 }
 

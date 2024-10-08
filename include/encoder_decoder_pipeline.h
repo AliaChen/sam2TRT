@@ -14,6 +14,16 @@ struct EncoderOutput {
     std::vector<float*> data;
     size_t ori_height;
     size_t ori_width;
+    cv::Mat ori_mat;
+};
+
+struct DecoderOutput {
+    std::vector<float*> data;
+    cv::Mat ori_mat;
+    size_t outscore_size;
+    size_t outmask_size;
+        size_t ori_height;
+    size_t ori_width;
 };
 
 class EncoderDecoderPipeline {
@@ -40,6 +50,7 @@ private:
     std::mutex mtx;
     std::condition_variable cv;
     std::queue<EncoderOutput> encoderOutputQueue;
+    std::queue<DecoderOutput> decoderOutputQueue;
     bool done = false;
 
     std::future<void> decoderFuture;

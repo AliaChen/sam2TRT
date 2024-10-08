@@ -123,10 +123,11 @@ namespace TRT {
 	class ImageProcessor {
 	public:
 		ImageProcessor();
-
 		float* preprocess_ima(cv::Mat &image);
-		//cv::Mat post_process_output(void* data);
-
+		cv::Mat process_output(float* scores, size_t scores_length, float* output_masks, size_t mask_length, bool select_best, int ori_width, int ori_height);
+		cv::Mat draw_mask(cv::Mat& image, cv::Mat& masks, bool draw_border = true);
+		void draw_masks(cv::Mat& ori_mat, std::vector<cv::Mat>& masks, bool draw_border = true);
+		
 	private:
 		int encoder_input_w = 1024;
 		int encoder_input_h = 1024;

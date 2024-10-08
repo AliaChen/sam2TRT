@@ -141,6 +141,60 @@ float* ImageProcessor::preprocess_ima(cv::Mat &image) {
     return input_data_device;
 }
 
+cv::Mat ImageProcessor::process_output(float* scores, size_t scores_length, float* output_masks, size_t mask_length, bool select_best, int ori_width, int ori_height) {
+
+
+    std::vector<uchar> binary_masks(mask_length);
+	for (size_t i = 0; i < mask_length; ++i) {
+		binary_masks[i] = (output_masks[i] > 0 ? 1: 0);
+		
+	}
+	cv::Mat label_masks(256, 256, CV_8UC1, binary_masks.data());
+	if (select_best){
+		int best_mask_id = std::max_element(scores, scores + scores_length) - scores;
+        //findMaxIndex(scores, scores_length);
+
+		cv::Mat resize_mask(ori_width, ori_height,CV_8UC1);
+		cv::resize(label_masks, resize_mask, cv::Size(ori_width, ori_height), 0, 0, cv::INTER_CUBIC);
+		return resize_mask;
+		
+	}
+	else {
+		return label_masks;
+	}
+
+  
+}
+
+void ImageProcessor::draw_masks(cv::Mat& ori_mat, std::vector<cv::Mat>& masks, bool draw_border) {
+    cv::Mat masked_image = ori_mat.clone();
+	for (size_t i =0 ; i < masks.size(); ++i){
+        masked_image = draw_mask(masked_image, masks[i], draw_border);
+    }
+    cv::imwrite("segResult.jpg", masked_image);
+
+}
+cv::Mat ImageProcessor::draw_mask(cv::Mat& image, cv::Mat& mask, bool draw_border) {
+    cv::Mat masked_image = image.clone();
+	
+	cv::Scalar color(255, 0, 0);
+	double alpha = 0.5f;
+
+	masked_image.setTo(color, mask > 0.0);
+	cv::addWeighted(image, 1 - alpha, masked_image, alpha, 0, masked_image);
+
+	if (draw_border) {
+		std::vector<std::vector<cv::Point>>contours;
+		cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
+
+		cv::drawContours(masked_image, contours, -1, color, 2);
+
+	}
+    // std::cout << "segResult.jpg saved" << std::endl;
+    return masked_image;
+}
+
+
 Infer::Infer() {}
 
 bool Infer::runEncoder(float* bindings[], cudaStream_t stream, nvinfer1::IExecutionContext* context) {
