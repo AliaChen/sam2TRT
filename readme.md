@@ -30,6 +30,17 @@
 - TensorRT
 - OpenCV
 
+## 模型转换
+- 将PyTorch模型为ONNX格式, 在sam2原始工程底下，添加pth2onnx.py文件
+`bash`
+    cd segment-anything-2 
+    python pth2onnx.py
+
+- 将onnx模型导出为trtengine，不做量化
+`bash`
+ ./trtexec --onnx=model.onnx --saveEngine=model.engine
+`bash`
+ 也可以使用onnxplugin进行重建
 ## 编译和运行
 
 1. 确保已安装所有依赖项。
@@ -60,6 +71,7 @@ bash
 - 图像预处理中使用了固定的均值和标准差，可能需要根据实际情况调整。
 - 当前实现使用了固定的点坐标(800, 440)作为示例，实际使用时需要根据需求修改。
 - 程序使用了异步处理方式，编码器和解码器在不同的线程中执行。
+- 有些tensorrt版本无法识别tile节点，这里将其替换为concat节点。
 
 ## 性能优化
 
